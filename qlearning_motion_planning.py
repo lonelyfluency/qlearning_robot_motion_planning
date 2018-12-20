@@ -135,4 +135,4 @@ if __name__ == "__main__":
     world_map = Map(start_point=(1,2),terminal=(3,33),sta_obstacle=sta_obst)
     robot1 = Robot()
     robot1.init_robot(world_map)
-    robot1.get_state_VA(world_map)
+
