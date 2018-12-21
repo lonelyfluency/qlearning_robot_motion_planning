@@ -53,6 +53,9 @@ class Robot:
         self.Vl__ = 0  # calculated action to take.
         self.Va__ = 0
 
+        self.vf = 3
+        self.wf = 0.3
+
         self.FA = (self.heading_dir-math.pi/2, self.heading_dir+math.pi/2)
 
         self.Q = {}
@@ -213,10 +216,27 @@ class Robot:
                         for va in range(10):
                             self.Q[(r,a,e,vl,va)] = [0] * 40
     
-    def train(self,g_map):
-        
+    def __SR_judge(self,g_map,dis,theta):
+        return (self.__dist_2_robot(g_map.TerminalPoint)-dis) + abs(theta-self.theta_target)*2
+
+    def policy_run(self,g_map):
+        current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
+        current_theta = self.heading_dir
+        self.__get_state(g_map)
+        if self.SR == 1:
+            self.Vl__ = self.vf
+            self.Va__ = self.wf
+            state_mem = (self.pos,self.heading_dir)
+            self.__virtual_trajectory(g_map)
+            if self.__SR_judge(g_map,self.__dist_2_robot(g_map.TerminalPoint),self.heading_dir) >= self.__SR_judge(g_map,current_dis2target,current_theta):
+                self.pos,self.heading_dir = state_mem
+                self.Va__ = -self.wf
+                self.__virtual_trajectory(g_map)
+        else:
+            act_idx = 
 
 
+def train_robot(bot):
 
 
 if __name__ == "__main__":
@@ -225,4 +245,6 @@ if __name__ == "__main__":
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
+    train_robot(bot)
+
 
