@@ -16,6 +16,9 @@ class Map:
 
 class Robot:
     def __init__(self):
+        self.global_time = 0
+        self.interval_time = 0
+
         self.pos = (0, 0)
         self.radius = 0.2
         self.heading_dir = math.pi/2
@@ -28,8 +31,15 @@ class Robot:
         self.Vamax = 2
         self.dv_max = 2
         self.da_max = 1
-        self.dt = 0.1 
+        self.dt = 0.001 
         
+        self.Vlmin_dw = 0
+        self.Vlmax_dw = 0
+        self.Vamin_dw = 0
+        self.Vamax_dw = 0
+        self.res_l = 0
+        self.res_a = 0
+
         self.R = 0
         self.A = 0
         self.E = 0
@@ -37,14 +47,18 @@ class Robot:
         self.VA = 0
         self.state = (0,0,0,0,0)
 
-        self.Vl = 0
+        self.Vl = 0   # current state linear and angular velocity.
         self.Va = 0
+
+        self.Vl__ = 0  # calculated action to take.
+        self.Va__ = 0
 
         self.FA = (self.heading_dir-math.pi/2, self.heading_dir+math.pi/2)
 
-    def __update_robot_state(self):
+    def __update_robot_state(self,current_time):
+        self.interval_time = current_time - self.global_time
+        self.global_time = current_time
         self.FA = (self.heading_dir - math.pi / 2, self.heading_dir + math.pi / 2)
-
 
 
     def init_robot(self, g_map):
@@ -69,12 +83,16 @@ class Robot:
         dy = obst[1] - self.pos[1]
         return (dx**2+dy**2)**(1/2)
 
-    def __get_nearest_obstacle(self, g_map):
+    def __get_nearest_obstacle(self, g_map):  # neet to be modified, should consider the obstacle in FA.
         nearest_obs = min(g_map.obstacle,key=lambda x: self.__dist_2_robot(x))
         return nearest_obs
 
+    def __get_nearest_obs_dis(self,g_map):
+        nearest_obs = self.__get_nearest_obstacle(g_map)
+        return self.__dist_2_robot(nearest_obs)
+
     def __get_state_R(self,g_map):
-        nearest_obs_dis = self.__dist_2_robot(self.__get_nearest_obstacle(g_map))
+        nearest_obs_dis = self.__get_nearest_obs_dis(g_map)
         if nearest_obs_dis <= self.D_max / 3:
             self.R = 0
         elif nearest_obs_dis <= self.D_max * 2 / 3:
@@ -127,7 +145,37 @@ class Robot:
         self.__get_state_VL(g_map)
         self.__get_state_VA(g_map)
         self.state = (self.R,self.A,self.E,self.VL,self.VA)
-        
+
+    def __dynamic_window(self):
+        self.Vlmin_dw = max(self.Vl-self.dv_max*self.dt,0)
+        self.Vamin_dw = max(self.Va-self.da_max*self.dt,-self.Vamax)
+        self.Vlmax_dw = min(self.Vl+self.dv_max*self.dt,self.Vlmax)
+        self.Vlmin_dw = min(self.Va+self.da_max*self.dt,self.Vamax)
+
+        self.res_l = (self.Vlmax_dw-self.Vlmin_dw) / 4
+        self.res_a = (self.Vamax_dw-self.Vamin_dw) / 10
+
+    def __get_action_from_dw(self,n):
+        Vnl = self.Vlmin_dw + math.floor((n-1)/4)*self.res_l
+        Vna = self.Vamin_dw + ((n-1)%10)*self.res_a
+        self.Va__ = Vnl
+        self.Vl__ = Vna
+
+    def __virtual_trajectory(self):
+        px = self.pos[0]
+        py = self.pos[1]
+        heading_theta = self.heading_dir
+        for i in range(self.interval_time // self.dt):
+            px += self.Vl__*math.cos(heading_theta)*self.dt
+            py += self.Vl__*math.sin(heading_theta)*self.dt
+            heading_theta += self.Va__*self.dt
+        self.pos = (px,py)
+        self.heading_dir = heading_theta
+
+    def reward_function(self):
+        Dv = self.__get_nearest_obs_dis
+
+
 
 
 if __name__ == "__main__":
