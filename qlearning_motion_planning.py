@@ -55,6 +55,8 @@ class Robot:
 
         self.FA = (self.heading_dir-math.pi/2, self.heading_dir+math.pi/2)
 
+        self.Q = {}
+
     def __update_robot_state(self,current_time):
         self.interval_time = current_time - self.global_time
         self.global_time = current_time
@@ -74,6 +76,11 @@ class Robot:
         dy = g_map.TerminalPoint[1] - self.pos[1]
         self.distance_target = (dx**2 + dy**2)**(1/2)
 
+    def __is_win_state(self,g_map):
+        if self.__get_distance_target(g_map) < self.radius:
+            return True
+        return False
+
     def __get_theta_target(self, g_map):
         sin_tar = (g_map.TerminalPoint[1] - self.pos[1]) / self.distance_target
         self.theta_target = math.asin(sin_tar)
@@ -91,14 +98,22 @@ class Robot:
         nearest_obs = self.__get_nearest_obstacle(g_map)
         return self.__dist_2_robot(nearest_obs)
 
+    def __is_fail_state(self,g_map):
+        if self.__get_nearest_obs_dis(g_map) < self.radius:
+            return True
+        return False
+
     def __get_state_R(self,g_map):
         nearest_obs_dis = self.__get_nearest_obs_dis(g_map)
         if nearest_obs_dis <= self.D_max / 3:
             self.R = 0
+            self.SR = 0
         elif nearest_obs_dis <= self.D_max * 2 / 3:
             self.R = 1
+            self.SR = 0
         elif nearest_obs_dis <= self.D_max:
             self.R = 2
+            self.SR = 0
         else:
             self.R = 3    # safe region
             self.SR = 1
@@ -161,7 +176,7 @@ class Robot:
         self.Va__ = Vnl
         self.Vl__ = Vna
 
-    def __virtual_trajectory(self):
+    def __virtual_trajectory(self,g_map):
         px = self.pos[0]
         py = self.pos[1]
         heading_theta = self.heading_dir
@@ -171,9 +186,35 @@ class Robot:
             heading_theta += self.Va__*self.dt
         self.pos = (px,py)
         self.heading_dir = heading_theta
+        self.Va = self.Va__
+        self.Vl = self.Vl__
+        self.__get_theta_target(g_map)
 
-    def reward_function(self):
-        Dv = self.__get_nearest_obs_dis
+    def __reward_function(self,g_map):
+        Dv = self.__get_nearest_obs_dis(g_map)
+        alpha_v = self.heading_dir - self.theta_target
+        self.__get_state(g_map)
+        win = self.__is_win_state(g_map)
+        fail = self.__is_fail_state(g_map)
+        if win:
+            return 2
+        elif fail:
+            return -1
+        elif self.SR == 1:
+            return 1
+        else:
+            return 0.05 * Dv + 0.2 * alpha_v + 0.1 * self.Vl__
+
+    def init_Q(self):
+        for r in range(3):
+            for a in range(10):
+                for e in range(8):
+                    for vl in range(4):
+                        for va in range(10):
+                            self.Q[(r,a,e,vl,va)] = [0] * 40
+    
+    def train(self,g_map):
+        
 
 
 
@@ -183,4 +224,5 @@ if __name__ == "__main__":
     world_map = Map(start_point=(1,2),terminal=(3,33),sta_obstacle=sta_obst)
     robot1 = Robot()
     robot1.init_robot(world_map)
+    robot1.init_Q()
 
