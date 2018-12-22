@@ -17,7 +17,7 @@ class Map:
 class Robot:
     def __init__(self):
         self.global_time = 0
-        self.interval_time = 0
+        self.interval_time = 0.1
 
         self.pos = (0, 0)
         self.radius = 0.2
@@ -25,7 +25,7 @@ class Robot:
         self.theta_target = 0
         self.distance_target = 0
 
-        self.D_max = 6  # the critical line of the safe region and unsafe region.
+        self.D_max = 1.5  # the critical line of the safe region and unsafe region.
         self.SR = 0
         self.Vlmax = 4
         self.Vamax = 2
@@ -50,8 +50,8 @@ class Robot:
         self.Vl = 0   # current state linear and angular velocity.
         self.Va = 0
 
-        self.Vl__ = 0  # calculated action to take.
-        self.Va__ = 0
+        self.Vl__ = 0.01  # calculated action to take.
+        self.Va__ = 0.01
 
         self.vf = 3
         self.wf = 0.3
@@ -70,6 +70,12 @@ class Robot:
         self.__set_init_pos(g_map)
         self.__get_distance_target(g_map)
         self.__get_theta_target(g_map)
+        self.Vl = 0   
+        self.Va = 0
+        self.Vl__ = 0.01 
+        self.Va__ = 0.01
+        self.FA = (self.heading_dir - math.pi / 2, self.heading_dir + math.pi / 2)
+        self.__get_state(g_map)
 
     def __set_init_pos(self, g_map):
         self.pos = g_map.StartPoint
@@ -78,6 +84,7 @@ class Robot:
         dx = g_map.TerminalPoint[0] - self.pos[0]
         dy = g_map.TerminalPoint[1] - self.pos[1]
         self.distance_target = (dx**2 + dy**2)**(1/2)
+        return self.distance_target
 
     def __is_win_state(self,g_map):
         if self.__get_distance_target(g_map) < self.radius:
@@ -93,12 +100,26 @@ class Robot:
         dy = obst[1] - self.pos[1]
         return (dx**2+dy**2)**(1/2)
 
+    def __test_obs_in_FA(self,obs):
+        obs_dis = self.__dist_2_robot(obs)
+        sin_obs = (obs[1]-self.pos[1]) / obs_dis
+        theta_obs = math.asin(sin_obs)
+        if theta_obs > self.FA[0] and theta_obs < self.FA[1]:
+            return True
+        return False
+
     def __get_nearest_obstacle(self, g_map):  # neet to be modified, should consider the obstacle in FA.
-        nearest_obs = min(g_map.obstacle,key=lambda x: self.__dist_2_robot(x))
+        obs_list_in_FA = [obs for obs in g_map.obstacle if self.__test_obs_in_FA(obs)]
+        try:
+            nearest_obs = min(obs_list_in_FA,key=lambda x: self.__dist_2_robot(x))
+        except ValueError:
+            return None
         return nearest_obs
 
     def __get_nearest_obs_dis(self,g_map):
         nearest_obs = self.__get_nearest_obstacle(g_map)
+        if nearest_obs==None:
+            return 1000
         return self.__dist_2_robot(nearest_obs)
 
     def __is_fail_state(self,g_map):
@@ -124,10 +145,13 @@ class Robot:
     def __get_state_A(self,g_map):
         res = math.pi/10
         nearest_obs = self.__get_nearest_obstacle(g_map)
-        nearest_obs_dis = self.__dist_2_robot(nearest_obs)
-        sin_obs = (nearest_obs[1]-self.pos[1]) / nearest_obs_dis
-        theta_obs = math.asin(sin_obs)
-        alpha_obs = self.heading_dir - theta_obs
+        try:
+            nearest_obs_dis = self.__dist_2_robot(nearest_obs)
+            sin_obs = (nearest_obs[1]-self.pos[1]) / nearest_obs_dis
+            theta_obs = math.asin(sin_obs)
+            alpha_obs = self.heading_dir - theta_obs
+        except TypeError:
+            alpha_obs = 0
 
         for i in range(10):
             if self.FA[0] + i * res > (math.pi/2-alpha_obs):
@@ -163,6 +187,7 @@ class Robot:
         self.__get_state_VL(g_map)
         self.__get_state_VA(g_map)
         self.state = (self.R,self.A,self.E,self.VL,self.VA)
+        self.FA = (self.heading_dir - math.pi / 2, self.heading_dir + math.pi / 2)
 
     def __dynamic_window(self):
         self.Vlmin_dw = max(self.Vl-self.dv_max*self.dt,0)
@@ -183,15 +208,17 @@ class Robot:
         px = self.pos[0]
         py = self.pos[1]
         heading_theta = self.heading_dir
-        for i in range(self.interval_time // self.dt):
+        for i in range(math.floor(self.interval_time / self.dt)):
             px += self.Vl__*math.cos(heading_theta)*self.dt
             py += self.Vl__*math.sin(heading_theta)*self.dt
             heading_theta += self.Va__*self.dt
+        print("px,py:",px,py)
         self.pos = (px,py)
         self.heading_dir = heading_theta
         self.Va = self.Va__
         self.Vl = self.Vl__
         self.__get_theta_target(g_map)
+        self.FA = (self.heading_dir - math.pi / 2, self.heading_dir + math.pi / 2)
 
     def __reward_function(self,g_map):
         Dv = self.__get_nearest_obs_dis(g_map)
@@ -231,11 +258,17 @@ class Robot:
             current_theta = self.heading_dir
             self.__get_state(g_map)
             current_state = self.state
+            print(current_state)
             if self.SR == 1:
                 self.Vl__ = self.vf
                 self.Va__ = self.wf
                 state_mem = (self.pos,self.heading_dir)
                 self.__virtual_trajectory(g_map)
+                self.__get_state(g_map)
+
+                print("Safe Region,pos:",self.pos)
+                print("Vl__,Va__:",self.Vl__,self.Va__)
+
                 if self.__SR_judge(g_map,self.__dist_2_robot(g_map.TerminalPoint),self.heading_dir) >= self.__SR_judge(g_map,current_dis2target,current_theta):
                     self.pos,self.heading_dir = state_mem
                     self.Va__ = -self.wf
@@ -243,12 +276,13 @@ class Robot:
             else:
                 heuristic_list = [self.__gen_heur_list(x) for x in range(40)]
                 while True:
-                    act_idx = min(heuristic_list)
+                    act_idx = heuristic_list.index(min(heuristic_list))
                     state_mem = (self.pos,self.heading_dir)
                     vl_mem,va_mem = self.Vl,self.Va
                     current_obs_dis = self.__get_nearest_obs_dis(g_map)
                     self.Vl__,self.Va__ = self.__get_action_from_dw(act_idx)
                     self.__virtual_trajectory(g_map)
+                    self.__get_state(g_map)
                     if self.__SR_judge(g_map,self.__dist_2_robot(g_map.TerminalPoint),self.heading_dir) >= self.__SR_judge(g_map,current_dis2target,current_theta) or self.__get_nearest_obs_dis(g_map)<current_obs_dis:
                         self.pos,self.heading_dir = state_mem
                         self.Vl, self.Va = vl_mem, va_mem
@@ -257,6 +291,9 @@ class Robot:
                         break
 
                 self.Q[current_state] = self.__reward_function(g_map) 
+
+                print("Unsafe region,pos:",self.pos)
+                
                 if  self.__is_fail_state(g_map):
                     break
             if self.__is_win_state(g_map):
@@ -266,13 +303,15 @@ class Robot:
         sce_num = scenario
         for i in range(sce_num):
             self.__policy_run(g_map)
+            print("scenario:",i)
+            self.init_robot(g_map)
     
 
 
 
 if __name__ == "__main__":
     sta_obst = [(5,5)]
-    world_map = Map(start_point=(1,2),terminal=(3,33),sta_obstacle=sta_obst)
+    world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst)
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
