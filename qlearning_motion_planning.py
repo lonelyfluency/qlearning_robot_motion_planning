@@ -65,6 +65,11 @@ class Robot:
         self.draw_list_x = []
         self.draw_list_y = []
 
+    def read_q_table(self):
+        infile = open('qtable.pickle','rb')
+        self.Q = pickle.load(infile)
+        infile.close()
+
     def __update_robot_state(self,current_time):
         self.interval_time = current_time - self.global_time
         self.global_time = current_time
@@ -299,11 +304,11 @@ class Robot:
                     self.Va__ = self.wf
                 else:
                     self.Va__ = 0
-                
+
                 state_mem = (self.pos,self.heading_dir)
                 self.__virtual_trajectory(g_map)
                 self.__get_state(g_map)
-                
+
                 judge1 = self.__SR_judge(g_map,current_dis2target,current_theta)
                 self.pos,self.heading_dir = state_mem
                 self.Va__ = -self.Va__
@@ -315,6 +320,25 @@ class Robot:
                     self.pos,self.heading_dir = state_mem
                     self.Va__ = -self.Va__
                     self.__virtual_trajectory(g_map)
+
+                # dy = g_map.TerminalPoint[1]-self.pos[1]
+                # dx = g_map.TerminalPoint[0]-self.pos[0]
+                # dis = self.__dist_2_robot(g_map.TerminalPoint)
+                # sin_tar = dy/dis
+                # asin = math.asin(dy/dis)
+                # if asin >= 0 and dx >= 0:
+                #     res = math.asin(sin_tar)
+                # elif asin >= 0 and dx < 0:
+                #     res = math.pi - math.asin(sin_tar)
+                # elif asin < 0 and dx >= 0:
+                #     res = 2 * math.pi + math.asin(sin_tar)
+                # else:
+                #     res = math.pi - math.asin(sin_tar)
+                # self.heading_dir = res
+                # self.Va__ = 0
+                # self.Vl__ = 0.5
+                # self.__virtual_trajectory(g_map)
+
                 
                 print("Safe region,pos:",self.pos)
           
@@ -350,7 +374,7 @@ class Robot:
 
                 print("Unsafe region,pos:",self.pos)
                 
-                if  self.__is_fail_state(g_map):
+                if self.__is_fail_state(g_map):
                     break
             if self.__is_win_state(g_map):
                 break
@@ -371,6 +395,49 @@ class Robot:
             obsy.append(obs[1])
         plt.scatter(obsx,obsy)
         plt.show()
+
+    def run(self,g_map):
+        while True:
+            current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
+            current_theta = self.heading_dir
+            self.__get_state(g_map)
+            current_state = self.state
+            print(current_state)
+
+            if self.SR == 1:
+                self.Vl__ = self.vf
+                if abs(self.heading_dir - self.theta_target) > 0.2:
+                    self.Va__ = self.wf
+                else:
+                    self.Va__ = 0
+
+                state_mem = (self.pos, self.heading_dir)
+                self.__virtual_trajectory(g_map)
+                self.__get_state(g_map)
+
+                judge1 = self.__SR_judge(g_map, current_dis2target, current_theta)
+                self.pos, self.heading_dir = state_mem
+                self.Va__ = -self.Va__
+                self.__virtual_trajectory(g_map)
+
+                judge2 = self.__SR_judge(g_map, current_dis2target, current_theta)
+
+                if judge1 > judge2:
+                    self.pos, self.heading_dir = state_mem
+                    self.Va__ = -self.Va__
+                    self.__virtual_trajectory(g_map)
+            else:
+                Q_line = self.Q[current_state]
+                act_idx = Q_line.index(max(Q_line))
+                self.Vl__, self.Va__ = self.__get_action_from_dw(act_idx)
+                self.__virtual_trajectory(g_map)
+                self.__get_state(g_map)
+                if self.__is_fail_state(g_map):
+                    break
+            if self.__is_win_state(g_map):
+                break
+
+
     
     def save_q_table(self):
         outfile = open('qtable.pickle','wb')
@@ -380,12 +447,13 @@ class Robot:
 
 
 if __name__ == "__main__":
-    sta_obst = [(3,3),(5,5),(7,7),(2,8),(4,7)]
+    sta_obst = [(3,3),(4,7),(4,4),(8,8)]
     world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst)
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
-    robot1.train(world_map,4)
+    robot1.read_q_table()
+    robot1.train(world_map, 50)
     robot1.draw_train_track(world_map)
     robot1.save_q_table()
 
