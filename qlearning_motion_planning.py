@@ -174,10 +174,10 @@ class Robot:
         self.res_a = (self.Vamax_dw-self.Vamin_dw) / 10
 
     def __get_action_from_dw(self,n):
+        self.__dynamic_window()
         Vnl = self.Vlmin_dw + math.floor((n-1)/4)*self.res_l
         Vna = self.Vamin_dw + ((n-1)%10)*self.res_a
-        self.Va__ = Vnl
-        self.Vl__ = Vna
+        return Vnl,Vna
 
     def __virtual_trajectory(self,g_map):
         px = self.pos[0]
@@ -219,24 +219,55 @@ class Robot:
     def __SR_judge(self,g_map,dis,theta):
         return (self.__dist_2_robot(g_map.TerminalPoint)-dis) + abs(theta-self.theta_target)*2
 
-    def policy_run(self,g_map):
-        current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
-        current_theta = self.heading_dir
-        self.__get_state(g_map)
-        if self.SR == 1:
-            self.Vl__ = self.vf
-            self.Va__ = self.wf
-            state_mem = (self.pos,self.heading_dir)
-            self.__virtual_trajectory(g_map)
-            if self.__SR_judge(g_map,self.__dist_2_robot(g_map.TerminalPoint),self.heading_dir) >= self.__SR_judge(g_map,current_dis2target,current_theta):
-                self.pos,self.heading_dir = state_mem
-                self.Va__ = -self.wf
+    def __gen_heur_list(self,n):
+        vl,va = self.__get_action_from_dw(n)
+        dv = abs(self.Vl - vl)
+        da = abs(self.Va - va)
+        return dv+da*2
+
+    def __policy_run(self,g_map):
+        while True:
+            current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
+            current_theta = self.heading_dir
+            self.__get_state(g_map)
+            current_state = self.state
+            if self.SR == 1:
+                self.Vl__ = self.vf
+                self.Va__ = self.wf
+                state_mem = (self.pos,self.heading_dir)
                 self.__virtual_trajectory(g_map)
-        else:
-            act_idx = 
+                if self.__SR_judge(g_map,self.__dist_2_robot(g_map.TerminalPoint),self.heading_dir) >= self.__SR_judge(g_map,current_dis2target,current_theta):
+                    self.pos,self.heading_dir = state_mem
+                    self.Va__ = -self.wf
+                    self.__virtual_trajectory(g_map)
+            else:
+                heuristic_list = [self.__gen_heur_list(x) for x in range(40)]
+                while True:
+                    act_idx = min(heuristic_list)
+                    state_mem = (self.pos,self.heading_dir)
+                    vl_mem,va_mem = self.Vl,self.Va
+                    current_obs_dis = self.__get_nearest_obs_dis(g_map)
+                    self.Vl__,self.Va__ = self.__get_action_from_dw(act_idx)
+                    self.__virtual_trajectory(g_map)
+                    if self.__SR_judge(g_map,self.__dist_2_robot(g_map.TerminalPoint),self.heading_dir) >= self.__SR_judge(g_map,current_dis2target,current_theta) or self.__get_nearest_obs_dis(g_map)<current_obs_dis:
+                        self.pos,self.heading_dir = state_mem
+                        self.Vl, self.Va = vl_mem, va_mem
+                        heuristic_list[act_idx] = 9999
+                    else:
+                        break
 
+                self.Q[current_state] = self.__reward_function(g_map) 
+                if  self.__is_fail_state(g_map):
+                    break
+            if self.__is_win_state(g_map):
+                break
 
-def train_robot(bot):
+    def train(self,g_map,scenario=100):
+        sce_num = scenario
+        for i in range(sce_num):
+            self.__policy_run(g_map)
+    
+
 
 
 if __name__ == "__main__":
@@ -245,6 +276,6 @@ if __name__ == "__main__":
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
-    train_robot(bot)
+    robot1.train(world_map)
 
 
