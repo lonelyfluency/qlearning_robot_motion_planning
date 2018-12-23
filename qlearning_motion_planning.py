@@ -148,6 +148,18 @@ class Robot:
             return 1000
         return self.__dist_2_robot(nearest_obs)
 
+    def __get_obs_theta(self,obs):
+        if obs:
+            obs_dx = obs[0] - self.pos[0]
+            obs_dy = obs[1] - self.pos[1]
+            obs_tan = obs_dy/obs_dx
+            obs_theta = math.atan(obs_tan)
+            if obs_theta < 0:
+                obs_theta = math.pi + obs_theta
+            return obs_theta
+        else:
+            return 0
+
     def __is_fail_state(self,g_map):
         if self.__get_nearest_obs_dis(g_map) < self.radius:
             return True
@@ -281,11 +293,21 @@ class Robot:
                         for va in range(10):
                             self.Q[(r,a,e,vl,va)] = [0] * 40
     
-    def __SR_judge(self,g_map,dis,theta):
-        vdis2T = self.__dist_2_robot(g_map.TerminalPoint)-dis              # the more negative the better 
-        dtheta = abs(theta-self.theta_target)                              # the more close to 0 the better
+    def __SR_judge(self,g_map,dis2Ter,dis2Obs,theta2Ter,theta2Obs):
+        vdis2T = self.__dist_2_robot(g_map.TerminalPoint)-dis2Ter              # the more negative the better 
+        dtheta_tar = abs(theta2Ter-self.theta_target)                              # the more close to 0 the better
+        nearest_obs = self.__get_nearest_obstacle(g_map)
+        nearest_obs_dis = self.__get_nearest_obs_dis(g_map)
+        if nearest_obs:
+            obs_theta = self.__get_obs_theta(nearest_obs)
+            dtheta_obs = abs(theta2Obs-obs_theta)             # the most important element: varation on distance to the nearest obstacle. We should get over the obstacle.
+            vdis2O = nearest_obs_dis - dis2Obs                # so dtheta_obs the larger, the better. vdis2O the larger the better
+        else:
+            vdis2O = 0
+            dtheta_obs = 0
+
         #print("vary on dis to terminal:",vdis2T,"dtheta:",dtheta)
-        return vdis2T * -4 + dtheta * -1
+        return  vdis2O * 2 + dtheta_obs*20 + vdis2T * -4 + dtheta_tar * -1
 
     def __gen_heur_list(self,n):
         vl,va = self.__get_action_from_dw(n)
@@ -352,6 +374,7 @@ class Robot:
                     state_mem = (self.pos,self.heading_dir)
                     vl_mem,va_mem = self.Vl,self.Va
                     current_obs_dis = self.__get_nearest_obs_dis(g_map)
+                    current_obs_theta = self.__get_obs_theta(self.__get_nearest_obstacle(g_map))
                     if current_obs_dis > self.distance_target:
                         self.Vl__ = self.vf
                         if abs(self.heading_dir - self.theta_target)>0.2:
@@ -363,12 +386,12 @@ class Robot:
                         self.__virtual_trajectory(g_map)
                         self.__get_state(g_map)
 
-                        judge1 = self.__SR_judge(g_map,current_dis2target,current_theta)
+                        judge1 = self.__SR_judge(g_map,current_dis2target,current_obs_dis,current_theta,current_obs_theta)
                         self.pos,self.heading_dir = state_mem
                         self.Va__ = -self.Va__
                         self.__virtual_trajectory(g_map)
 
-                        judge2 = self.__SR_judge(g_map,current_dis2target,current_theta)
+                        judge2 = self.__SR_judge(g_map,current_dis2target,current_obs_dis,current_theta,current_obs_theta)
 
                         if judge1 > judge2:
                             self.pos,self.heading_dir = state_mem
@@ -378,7 +401,7 @@ class Robot:
                     self.Vl__,self.Va__ = self.__get_action_from_dw(act_idx)
                     self.__virtual_trajectory(g_map)
                     self.__get_state(g_map)
-                    if self.__SR_judge(g_map,current_dis2target,current_theta)<0 or self.__get_nearest_obs_dis(g_map)<current_obs_dis:
+                    if self.__SR_judge(g_map,current_dis2target,current_obs_dis,current_theta,current_obs_theta)<0 or self.__get_nearest_obs_dis(g_map)<current_obs_dis:
                         self.pos,self.heading_dir = state_mem
                         self.Vl, self.Va = vl_mem, va_mem
                         heuristic_list[act_idx] = 9999
