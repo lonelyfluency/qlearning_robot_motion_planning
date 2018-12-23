@@ -24,11 +24,11 @@ class Robot:
 
         self.pos = (0, 0)
         self.radius = 0.3
-        self.heading_dir = math.pi/2
+        self.heading_dir = 0#math.pi/2
         self.theta_target = 0
         self.distance_target = 0
 
-        self.D_max = 1.5  # the critical line of the safe region and unsafe region.
+        self.D_max = 2.1  # the critical line of the safe region and unsafe region.
         self.SR = 0
         self.Vlmax = 4
         self.Vamax = 2
@@ -56,8 +56,8 @@ class Robot:
         self.Vl__ = 0.01  # calculated action to take.
         self.Va__ = 0.01
 
-        self.vf = 3
-        self.wf = 0.4
+        self.vf = 1
+        self.wf = 0.5
 
         self.FA = (self.heading_dir-math.pi/2, self.heading_dir+math.pi/2)
 
@@ -180,7 +180,7 @@ class Robot:
             alpha_obs = 0
 
         for i in range(10):
-            if self.FA[0] + i * res > (math.pi/2-alpha_obs):
+            if i * res > (math.pi/2-alpha_obs):
                 self.A = i
                 break
 
@@ -233,6 +233,8 @@ class Robot:
         self.__dynamic_window()
         Vnl = self.Vlmin_dw + math.floor((n-1)/4)*self.res_l
         Vna = self.Vamin_dw + ((n-1)%10)*self.res_a
+        if abs(Vnl) < 0.01:
+            Vnl = random.random() / 10
         return Vnl,Vna
 
     def __virtual_trajectory(self,g_map):
@@ -244,7 +246,7 @@ class Robot:
             px += self.Vl__*math.cos(heading_theta)*self.dt
             py += self.Vl__*math.sin(heading_theta)*self.dt
             heading_theta += self.Va__*self.dt
-        print("px,py:",px,py)
+        #print("px,py:",px,py)
         self.draw_list_x.append(px)
         self.draw_list_y.append(py)
 
@@ -282,7 +284,7 @@ class Robot:
     def __SR_judge(self,g_map,dis,theta):
         vdis2T = self.__dist_2_robot(g_map.TerminalPoint)-dis              # the more negative the better 
         dtheta = abs(theta-self.theta_target)                              # the more close to 0 the better
-        print("vary on dis to terminal:",vdis2T,"dtheta:",dtheta)
+        #print("vary on dis to terminal:",vdis2T,"dtheta:",dtheta)
         return vdis2T * -4 + dtheta * -1
 
     def __gen_heur_list(self,n):
@@ -299,45 +301,45 @@ class Robot:
             current_state = self.state
             print(current_state)
             if self.SR == 1:
-                self.Vl__ = self.vf
-                if abs(self.heading_dir - self.theta_target)>0.2:
-                    self.Va__ = self.wf
-                else:
-                    self.Va__ = 0
-
-                state_mem = (self.pos,self.heading_dir)
-                self.__virtual_trajectory(g_map)
-                self.__get_state(g_map)
-
-                judge1 = self.__SR_judge(g_map,current_dis2target,current_theta)
-                self.pos,self.heading_dir = state_mem
-                self.Va__ = -self.Va__
-                self.__virtual_trajectory(g_map)
-
-                judge2 = self.__SR_judge(g_map,current_dis2target,current_theta)
-
-                if judge1 > judge2:
-                    self.pos,self.heading_dir = state_mem
-                    self.Va__ = -self.Va__
-                    self.__virtual_trajectory(g_map)
-
-                # dy = g_map.TerminalPoint[1]-self.pos[1]
-                # dx = g_map.TerminalPoint[0]-self.pos[0]
-                # dis = self.__dist_2_robot(g_map.TerminalPoint)
-                # sin_tar = dy/dis
-                # asin = math.asin(dy/dis)
-                # if asin >= 0 and dx >= 0:
-                #     res = math.asin(sin_tar)
-                # elif asin >= 0 and dx < 0:
-                #     res = math.pi - math.asin(sin_tar)
-                # elif asin < 0 and dx >= 0:
-                #     res = 2 * math.pi + math.asin(sin_tar)
+                # self.Vl__ = self.vf
+                # if abs(self.heading_dir - self.theta_target)>0.2:
+                #     self.Va__ = self.wf
                 # else:
-                #     res = math.pi - math.asin(sin_tar)
-                # self.heading_dir = res
-                # self.Va__ = 0
-                # self.Vl__ = 0.5
+                #     self.Va__ = 0
+
+                # state_mem = (self.pos,self.heading_dir)
                 # self.__virtual_trajectory(g_map)
+                # self.__get_state(g_map)
+
+                # judge1 = self.__SR_judge(g_map,current_dis2target,current_theta)
+                # self.pos,self.heading_dir = state_mem
+                # self.Va__ = -self.Va__
+                # self.__virtual_trajectory(g_map)
+
+                # judge2 = self.__SR_judge(g_map,current_dis2target,current_theta)
+                
+                # if judge1 > judge2:
+                #     self.pos,self.heading_dir = state_mem
+                #     self.Va__ = -self.Va__
+                #     self.__virtual_trajectory(g_map)
+
+                dy = g_map.TerminalPoint[1]-self.pos[1]
+                dx = g_map.TerminalPoint[0]-self.pos[0]
+                dis = self.__dist_2_robot(g_map.TerminalPoint)
+                sin_tar = dy/dis
+                asin = math.asin(dy/dis)
+                if asin >= 0 and dx >= 0:
+                    res = math.asin(sin_tar)
+                elif asin >= 0 and dx < 0:
+                    res = math.pi - math.asin(sin_tar)
+                elif asin < 0 and dx >= 0:
+                    res = 2 * math.pi + math.asin(sin_tar)
+                else:
+                    res = math.pi - math.asin(sin_tar)
+                self.heading_dir = res
+                self.Va__ = 0
+                self.Vl__ = 2
+                self.__virtual_trajectory(g_map)
 
                 
                 print("Safe region,pos:",self.pos)
@@ -351,6 +353,27 @@ class Robot:
                     vl_mem,va_mem = self.Vl,self.Va
                     current_obs_dis = self.__get_nearest_obs_dis(g_map)
                     if current_obs_dis > self.distance_target:
+                        self.Vl__ = self.vf
+                        if abs(self.heading_dir - self.theta_target)>0.2:
+                            self.Va__ = self.wf
+                        else:
+                            self.Va__ = 0
+
+                        state_mem = (self.pos,self.heading_dir)
+                        self.__virtual_trajectory(g_map)
+                        self.__get_state(g_map)
+
+                        judge1 = self.__SR_judge(g_map,current_dis2target,current_theta)
+                        self.pos,self.heading_dir = state_mem
+                        self.Va__ = -self.Va__
+                        self.__virtual_trajectory(g_map)
+
+                        judge2 = self.__SR_judge(g_map,current_dis2target,current_theta)
+
+                        if judge1 > judge2:
+                            self.pos,self.heading_dir = state_mem
+                            self.Va__ = -self.Va__
+                            self.__virtual_trajectory(g_map)
                         break
                     self.Vl__,self.Va__ = self.__get_action_from_dw(act_idx)
                     self.__virtual_trajectory(g_map)
@@ -370,7 +393,7 @@ class Robot:
                     else:
                         break
 
-                self.Q[current_state] = self.__reward_function(g_map) 
+                self.Q[current_state][act_idx] = self.__reward_function(g_map) 
 
                 print("Unsafe region,pos:",self.pos)
                 
@@ -397,45 +420,41 @@ class Robot:
         plt.show()
 
     def run(self,g_map):
-        while True:
-            current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
-            current_theta = self.heading_dir
+        current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
+        current_theta = self.heading_dir
+        self.__get_state(g_map)
+        current_state = self.state
+        print(current_state)
+
+        if self.SR == 1:
+            self.Vl__ = self.vf
+            if abs(self.heading_dir - self.theta_target) > 0.2:
+                self.Va__ = self.wf
+            else:
+                self.Va__ = 0
+
+            state_mem = (self.pos, self.heading_dir)
+            self.__virtual_trajectory(g_map)
             self.__get_state(g_map)
-            current_state = self.state
-            print(current_state)
 
-            if self.SR == 1:
-                self.Vl__ = self.vf
-                if abs(self.heading_dir - self.theta_target) > 0.2:
-                    self.Va__ = self.wf
-                else:
-                    self.Va__ = 0
+            judge1 = self.__SR_judge(g_map, current_dis2target, current_theta)
+            self.pos, self.heading_dir = state_mem
+            self.Va__ = -self.Va__
+            self.__virtual_trajectory(g_map)
 
-                state_mem = (self.pos, self.heading_dir)
-                self.__virtual_trajectory(g_map)
-                self.__get_state(g_map)
+            judge2 = self.__SR_judge(g_map, current_dis2target, current_theta)
 
-                judge1 = self.__SR_judge(g_map, current_dis2target, current_theta)
+            if judge1 > judge2:
                 self.pos, self.heading_dir = state_mem
                 self.Va__ = -self.Va__
                 self.__virtual_trajectory(g_map)
-
-                judge2 = self.__SR_judge(g_map, current_dis2target, current_theta)
-
-                if judge1 > judge2:
-                    self.pos, self.heading_dir = state_mem
-                    self.Va__ = -self.Va__
-                    self.__virtual_trajectory(g_map)
-            else:
-                Q_line = self.Q[current_state]
-                act_idx = Q_line.index(max(Q_line))
-                self.Vl__, self.Va__ = self.__get_action_from_dw(act_idx)
-                self.__virtual_trajectory(g_map)
-                self.__get_state(g_map)
-                if self.__is_fail_state(g_map):
-                    break
-            if self.__is_win_state(g_map):
-                break
+        else:
+            Q_line = self.Q[current_state]
+            act_idx = Q_line.index(max(Q_line))
+            self.Vl__, self.Va__ = self.__get_action_from_dw(act_idx)
+            self.__virtual_trajectory(g_map)
+            self.__get_state(g_map)
+                
 
 
     
@@ -447,13 +466,13 @@ class Robot:
 
 
 if __name__ == "__main__":
-    sta_obst = [(3,3),(4,7),(4,4),(8,8)]
+    sta_obst = [(3,3),(4,4),(8,8),(4,7),(1,6),(4,8),(3,8),(3,7),(2,3)]
     world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst)
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
     robot1.read_q_table()
-    robot1.train(world_map, 50)
+    robot1.train(world_map, 1)
     robot1.draw_train_track(world_map)
     robot1.save_q_table()
 

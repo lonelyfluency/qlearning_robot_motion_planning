@@ -68,7 +68,7 @@ if __name__ == '__main__':
     dynamic_obs = DynaObs(5)
     dynamic_obs.initial(x_lim=[0, 30], y_lim=[0, 30], velocity_lim=[2, 0.8], method='random')
 
-    sta_obst = [(3, 3), (4, 4), (8, 8)]
+    sta_obst = [(3, 3), (4, 4),(4,10), (8, 8)]
     world_map = Map(start_point=(0, 0), terminal=(30, 30), sta_obstacle=sta_obst)
     robot1 = Robot()
     robot1.init_robot(world_map)
