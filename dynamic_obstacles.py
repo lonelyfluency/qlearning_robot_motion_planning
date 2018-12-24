@@ -19,15 +19,15 @@ class DynaObs:
     def initial(self, x_lim, y_lim, velocity_lim, method='same'):
         # _x_lim: [left, right], _y_lim: [down, up],  the boundary of obstacles
         # velocity_lim: [v_max, w_max]
-        self.set_centers([x_lim[0]+5, x_lim[1]-5], [y_lim[0]+5, y_lim[1]-5])
+        self.set_centers([x_lim[0]+3, x_lim[1]-3], [y_lim[0]+3, y_lim[1]-3])
         self.ob_states[:, :2] = self.center_pts.copy()
         self.set_radius(x_lim, y_lim)
         self.set_vel_lim(velocity_lim[0], velocity_lim[1], method)
 
     def set_centers(self, center_x_lim, center_y_lim):
         # center_x_lim: [left, right], center_y_lim: [down, up],  the boundary of centers
-        xs = np.random.randint(center_x_lim[0], center_x_lim[1]+1, self.num_of_obs)
-        ys = np.random.randint(center_y_lim[0], center_y_lim[1]+1, self.num_of_obs)
+        xs = np.random.uniform(center_x_lim[0], center_x_lim[1], self.num_of_obs)
+        ys = np.random.uniform(center_y_lim[0], center_y_lim[1], self.num_of_obs)
         self.center_pts = np.concatenate((xs, ys)).reshape((2, self.num_of_obs)).transpose()
 
     def set_radius(self, x_lim, y_lim):

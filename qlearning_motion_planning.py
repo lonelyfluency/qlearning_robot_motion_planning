@@ -3,6 +3,7 @@ import math
 import matplotlib.pyplot as plt
 import pickle
 import random
+from dynamic_obstacles import DynaObs
 
 class Map:
     def __init__(self,**kwargs):
@@ -11,11 +12,15 @@ class Map:
         self.StaticObstacle = kwargs['sta_obstacle']
         try:
             self.DynamicObstacle = kwargs['dyn_obstacle']
+            self.DynamicObstacle.initial(x_lim=[0, 10], y_lim=[0, 10], velocity_lim=[1, 0.5], method='random')
         except KeyError:
             self.DynamicObstacle = []
-        self.obstacle = self.StaticObstacle + self.DynamicObstacle
+        self.obstacle = self.StaticObstacle + [tuple(term) for term in list(self.DynamicObstacle.ob_states[:, :2])]
 
 
+    def update_obs(self):
+        self.DynamicObstacle.update()
+        self.obstacle = self.StaticObstacle + [tuple(term) for term in list(self.DynamicObstacle.ob_states[:, :2])]
 
 class Robot:
     def __init__(self):
@@ -144,7 +149,7 @@ class Robot:
 
     def __get_nearest_obs_dis(self,g_map):
         nearest_obs = self.__get_nearest_obstacle(g_map)
-        if nearest_obs==None:
+        if not nearest_obs:
             return 1000
         return self.__dist_2_robot(nearest_obs)
 
@@ -262,6 +267,8 @@ class Robot:
         self.draw_list_x.append(px)
         self.draw_list_y.append(py)
 
+        g_map.update_obs()
+
         self.pos = (px,py)
         self.heading_dir = heading_theta
         self.Va = self.Va__
@@ -292,9 +299,10 @@ class Robot:
                     for vl in range(4):
                         for va in range(10):
                             self.Q[(r,a,e,vl,va)] = [0] * 40
-    
+
+
     def __SR_judge(self,g_map,dis2Ter,dis2Obs,theta2Ter,theta2Obs):
-        vdis2T = self.__dist_2_robot(g_map.TerminalPoint)-dis2Ter              # the more negative the better 
+        vdis2T = self.__dist_2_robot(g_map.TerminalPoint)-dis2Ter              # the more negative the better
         dtheta_tar = abs(theta2Ter-self.theta_target)                              # the more close to 0 the better
         nearest_obs = self.__get_nearest_obstacle(g_map)
         nearest_obs_dis = self.__get_nearest_obs_dis(g_map)
@@ -309,6 +317,14 @@ class Robot:
         #print("vary on dis to terminal:",vdis2T,"dtheta:",dtheta)
         return  vdis2O * 2 + dtheta_obs*20 + vdis2T * -4 + dtheta_tar * -1
 
+        # vdis2Tar = self.__dist_2_robot(g_map.TerminalPoint) - dis2Ter
+        # nearest_obs_dis = self.__get_nearest_obs_dis(g_map)
+        # vdis2Obs = nearest_obs_dis - dis2Obs
+        # res = vdis2Tar*(-4) + vdis2Obs * 10
+        # print(res)
+        # return res
+
+
     def __gen_heur_list(self,n):
         vl,va = self.__get_action_from_dw(n)
         dv = abs(self.Vl - vl)
@@ -319,58 +335,60 @@ class Robot:
         while True:
             current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
             current_theta = self.heading_dir
+            current_dis2obs = self.__get_nearest_obs_dis(g_map)
+            current_theta2Obs = self.__get_obs_theta(self.__get_nearest_obstacle(g_map))
             self.__get_state(g_map)
             current_state = self.state
             print(current_state)
             if self.SR == 1:
-                # self.Vl__ = self.vf
-                # if abs(self.heading_dir - self.theta_target)>0.2:
-                #     self.Va__ = self.wf
-                # else:
-                #     self.Va__ = 0
-
-                # state_mem = (self.pos,self.heading_dir)
-                # self.__virtual_trajectory(g_map)
-                # self.__get_state(g_map)
-
-                # judge1 = self.__SR_judge(g_map,current_dis2target,current_theta)
-                # self.pos,self.heading_dir = state_mem
-                # self.Va__ = -self.Va__
-                # self.__virtual_trajectory(g_map)
-
-                # judge2 = self.__SR_judge(g_map,current_dis2target,current_theta)
-                
-                # if judge1 > judge2:
-                #     self.pos,self.heading_dir = state_mem
-                #     self.Va__ = -self.Va__
-                #     self.__virtual_trajectory(g_map)
-
-                dy = g_map.TerminalPoint[1]-self.pos[1]
-                dx = g_map.TerminalPoint[0]-self.pos[0]
-                dis = self.__dist_2_robot(g_map.TerminalPoint)
-                sin_tar = dy/dis
-                asin = math.asin(dy/dis)
-                if asin >= 0 and dx >= 0:
-                    res = math.asin(sin_tar)
-                elif asin >= 0 and dx < 0:
-                    res = math.pi - math.asin(sin_tar)
-                elif asin < 0 and dx >= 0:
-                    res = 2 * math.pi + math.asin(sin_tar)
+                self.Vl__ = self.vf
+                if abs(self.heading_dir - self.theta_target)>0.2:
+                    self.Va__ = self.wf
                 else:
-                    res = math.pi - math.asin(sin_tar)
-                self.heading_dir = res
-                self.Va__ = 0
-                self.Vl__ = 2
+                    self.Va__ = 0
+
+                state_mem = (self.pos,self.heading_dir)
+                self.__virtual_trajectory(g_map)
+                self.__get_state(g_map)
+
+                judge1 = self.__SR_judge(g_map,current_dis2target,current_dis2obs,current_theta,current_theta2Obs)
+                self.pos,self.heading_dir = state_mem
+                self.Va__ = -self.Va__
                 self.__virtual_trajectory(g_map)
 
+                judge2 = self.__SR_judge(g_map,current_dis2target,current_dis2obs,current_theta,current_theta2Obs)
                 
+                if judge1 > judge2:
+                    self.pos,self.heading_dir = state_mem
+                    self.Va__ = -self.Va__
+                    self.__virtual_trajectory(g_map)
+
+                # dy = g_map.TerminalPoint[1]-self.pos[1]
+                # dx = g_map.TerminalPoint[0]-self.pos[0]
+                # dis = self.__dist_2_robot(g_map.TerminalPoint)
+                # sin_tar = dy/dis
+                # asin = math.asin(dy/dis)
+                # if asin >= 0 and dx >= 0:
+                #     res = math.asin(sin_tar)
+                # elif asin >= 0 and dx < 0:
+                #     res = math.pi - math.asin(sin_tar)
+                # elif asin < 0 and dx >= 0:
+                #     res = 2 * math.pi + math.asin(sin_tar)
+                # else:
+                #     res = math.pi - math.asin(sin_tar)
+                # self.heading_dir = res
+                # self.Va__ = 0
+                # self.Vl__ = 2
+                # self.__virtual_trajectory(g_map)
+
                 print("Safe region,pos:",self.pos)
           
             else:
                 heuristic_list = [self.__gen_heur_list(x) for x in range(40)]
-                heuristic_list[heuristic_list.index(min(heuristic_list))] = 9999
+                # heuristic_list[heuristic_list.index(min(heuristic_list))] = 9999
+
                 while True:
-                    act_idx = heuristic_list.index(min(heuristic_list))
+                    act_idx = heuristic_list.index(max(heuristic_list))
                     state_mem = (self.pos,self.heading_dir)
                     vl_mem,va_mem = self.Vl,self.Va
                     current_obs_dis = self.__get_nearest_obs_dis(g_map)
@@ -404,7 +422,7 @@ class Robot:
                     if self.__SR_judge(g_map,current_dis2target,current_obs_dis,current_theta,current_obs_theta)<0 or self.__get_nearest_obs_dis(g_map)<current_obs_dis:
                         self.pos,self.heading_dir = state_mem
                         self.Vl, self.Va = vl_mem, va_mem
-                        heuristic_list[act_idx] = 9999
+                        heuristic_list[act_idx] = -9999
                         if len(set(heuristic_list)) == 1:
                             #heuristic_list = [self.__gen_heur_list(x) for x in range(40)]
                             #act_idx = heuristic_list.index(min(heuristic_list))
@@ -489,8 +507,8 @@ class Robot:
 
 
 if __name__ == "__main__":
-    sta_obst = [(3,3),(4,4),(8,8),(4,7),(1,6),(4,8),(3,8),(3,7),(2,3)]
-    world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst)
+    sta_obst = [(3,3),(4,4),(8,8)]
+    world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst, dyn_obstacle=DynaObs(5))
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
