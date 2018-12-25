@@ -463,6 +463,8 @@ class Robot:
     def run(self,g_map):
         current_dis2target = self.__dist_2_robot(g_map.TerminalPoint)
         current_theta = self.heading_dir
+        current_obs_dis = self.__get_nearest_obs_dis(g_map)
+        current_obs_theta = self.__get_obs_theta(self.__get_nearest_obstacle(g_map))
         self.__get_state(g_map)
         current_state = self.state
         print(current_state)
@@ -478,12 +480,12 @@ class Robot:
             self.__virtual_trajectory(g_map)
             self.__get_state(g_map)
 
-            judge1 = self.__SR_judge(g_map, current_dis2target, current_theta)
+            judge1 = self.__SR_judge(g_map, current_dis2target,current_obs_dis,current_theta,current_obs_theta)
             self.pos, self.heading_dir = state_mem
             self.Va__ = -self.Va__
             self.__virtual_trajectory(g_map)
 
-            judge2 = self.__SR_judge(g_map, current_dis2target, current_theta)
+            judge2 = self.__SR_judge(g_map, current_dis2target,current_obs_dis,current_theta,current_obs_theta)
 
             if judge1 > judge2:
                 self.pos, self.heading_dir = state_mem
