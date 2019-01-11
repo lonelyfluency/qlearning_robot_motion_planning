@@ -510,7 +510,7 @@ class Robot:
 
 if __name__ == "__main__":
     sta_obst = [(3,3),(4,4),(8,8)]
-    world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst, dyn_obstacle=DynaObs(5))
+    world_map = Map(start_point=(0,0),terminal=(10,10),sta_obstacle=sta_obst, dyn_obstacle=DynaObs(2))
     robot1 = Robot()
     robot1.init_robot(world_map)
     robot1.init_Q()
